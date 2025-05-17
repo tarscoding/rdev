@@ -1,0 +1,8 @@
+# 强制所有文本文件使用 LF 换行符
+* text=auto eol=lf
+
+# 排除二进制文件（不处理换行符）
+*.png binary
+*.jpg binary
+*.zip binary
+*.pdf binary
