@@ -1,15 +1,20 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import ProjectConfigForm from './components/ProjectConfigForm.vue';
+import SceneConfigForm from './components/SceneConfigForm.vue';
 import type { ProjectConfig } from './types/project';
 
 const currentStep = ref(1);
+const totalSteps = 6;
 const projectConfig = ref<ProjectConfig | null>(null);
 
-const handleConfigSubmit = (config: ProjectConfig) => {
-  projectConfig.value = config;
-  currentStep.value = 2;
+const handlePrev = () => {
+  if (currentStep.value > 1) currentStep.value--;
 };
+const handleNext = () => {
+  if (currentStep.value < totalSteps) currentStep.value++;
+};
+
 </script>
 
 <template>
@@ -20,7 +25,7 @@ const handleConfigSubmit = (config: ProjectConfig) => {
     </el-header>
 
     <el-main>
-      <el-steps :active="currentStep" finish-status="success" class="steps">
+      <el-steps :active="currentStep - 1" finish-status="success" class="steps">
         <el-step title="项目设置" />
         <el-step title="开发场景" />
         <el-step title="容器设置" />
@@ -30,17 +35,21 @@ const handleConfigSubmit = (config: ProjectConfig) => {
       </el-steps>
 
       <div class="content">
-        <ProjectConfigForm v-if="currentStep === 1" @submit="handleConfigSubmit" />
-
-        <div v-else-if="currentStep === 2">
-          <!-- 环境配置组件将在这里添加 -->
-          <h2>环境配置</h2>
-        </div>
-
-        <div v-else>
-          <!-- 项目生成预览将在这里添加 -->
-          <h2>项目生成预览</h2>
-        </div>
+        <ProjectConfigForm
+          v-if="currentStep === 1"
+          :currentStep="currentStep"
+          :totalSteps="totalSteps"
+          @next="handleNext"
+        />
+        <SceneConfigForm
+          v-if="currentStep === 2"
+          :projectConfig="projectConfig"
+          :currentStep="currentStep"
+          :totalSteps="totalSteps"
+          @prev="handlePrev"
+          @next="handleNext"
+        />
+        <!-- 其他步骤... -->
       </div>
     </el-main>
   </el-container>
