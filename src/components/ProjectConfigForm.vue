@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed, defineProps } from 'vue';
+import { ref, watch, computed } from 'vue';
 import { useProjectStore } from '../stores/project';
 import type { ProjectConfig } from '../types/project';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -13,11 +13,6 @@ const projectStore = useProjectStore();
 const formData = ref<ProjectConfig>({ ...projectStore.projectConfig });
 const loading = ref(false);
 const rustVersions = ref<{ label: string; value: string }[]>([{ label: 'latest', value: 'latest' }]);
-
-const props = defineProps<{
-  currentStep: number;
-  totalSteps: number;
-}>();
 
 // 2. Rust 版本获取与处理
 async function fetchRustVersions(query = '') {
@@ -89,6 +84,10 @@ watch(
 const rules = computed(() => getProjectConfigRules(formData.value.repoType));
 const formRef = ref<FormInstance>();
 
+const props = defineProps<{
+  currentStep: number;
+  totalSteps: number;
+}>();
 
 const handleNext = async () => {
   if (!formData.value || !formRef.value) return;

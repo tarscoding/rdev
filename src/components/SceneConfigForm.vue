@@ -4,7 +4,6 @@ import { useSceneStore } from '../stores/scene';
 import { Icon } from '@iconify/vue';
 import { storeToRefs } from 'pinia';
 import FormCardContainer from './FormCardContainer.vue';
-import { defineProps } from 'vue';
 
 const sceneStore = useSceneStore();
 const { sceneListRef, currentSceneId } = storeToRefs(sceneStore);
