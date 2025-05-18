@@ -7,8 +7,15 @@ export interface ProjectConfig {
   version: string;
   author: string;
   rustVersion: string;
+  nation: nation;
 }
 
+export interface nation {
+  name: string;
+  code: string;
+  timezone: string[];
+  utcOffset?: string;
+}
 
 export interface PortConfig {
   host: number;

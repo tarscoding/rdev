@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
-import { useProjectStore } from '../stores/project';
+import { useProjectStore, defaultConfigForForm } from '../stores/project';
 import type { ProjectConfig } from '../types/project';
 import { open } from '@tauri-apps/plugin-dialog';
 import { getProjectConfigRules } from '../validators/projectConfigRules';
@@ -10,9 +10,31 @@ import FormCardContainer from './FormCardContainer.vue';
 
 // 1. 表单数据与状态
 const projectStore = useProjectStore();
-const formData = ref<ProjectConfig>({ ...projectStore.projectConfig });
+const formData = ref<{
+  repoType: 'local' | 'remote',
+  localPath: string,
+  remoteRepo: string,
+  name: string,
+  description: string,
+  version: string,
+  author: string,
+  rustVersion: string,
+  nationCode: string,
+  timezone: string
+}>({
+  ...defaultConfigForForm
+});
 const loading = ref(false);
 const rustVersions = ref<{ label: string; value: string }[]>([{ label: 'latest', value: 'latest' }]);
+
+// 计算当前选中的国家对象
+const currentNation = computed(() =>
+  projectStore.nationList.find(n => n.code === formData.value.nationCode)
+);
+// 计算当前国家的时区选项
+const timezoneOptions = computed(() =>
+  currentNation.value ? currentNation.value.timezone : []
+);
 
 // 2. Rust 版本获取与处理
 async function fetchRustVersions(query = '') {
@@ -42,16 +64,7 @@ const emit = defineEmits<{
 }>();
 
 const resetConfig = () => {
-  // 只重置本地 formData，不影响全局 store
-  formData.value = {
-    repoType: 'local',
-    localPath: '',
-    name: '',
-    description: '',
-    version: '0.1.0',
-    author: '',
-    rustVersion: 'latest'
-  };
+  formData.value = { ...defaultConfigForForm };
   formRef.value?.resetFields();
   formRef.value?.clearValidate();
 };
@@ -66,20 +79,6 @@ async function chooseDirectory() {
   }
 }
 
-watch(
-  () => formData.value.remoteRepo,
-  (newVal) => {
-    // 只清除校验状态，不触发校验
-    formRef.value?.clearValidate();
-    if (newVal) {
-      const match = newVal.match(/([^\/]+?)(?:\.git)?$/);
-      if (match && match[1]) {
-        formData.value.name = match[1];
-      }
-    }
-  }
-);
-
 // 表单过滤
 const rules = computed(() => getProjectConfigRules(formData.value.repoType));
 const formRef = ref<FormInstance>();
@@ -93,8 +92,23 @@ const handleNext = async () => {
   if (!formData.value || !formRef.value) return;
   try {
     await formRef.value.validate();
-    // 校验通过，暂存到全局
-    projectStore.setProjectConfig(formData.value);
+    // 组装 ProjectConfig
+    const nation = projectStore.nationList.find(n => n.code === formData.value.nationCode);
+    const config: ProjectConfig = {
+      repoType: formData.value.repoType,
+      localPath: formData.value.localPath,
+      remoteRepo: formData.value.remoteRepo,
+      name: formData.value.name,
+      description: formData.value.description,
+      version: formData.value.version,
+      author: formData.value.author,
+      rustVersion: formData.value.rustVersion,
+      nation: {
+        ...(nation as any),
+        timezone: [formData.value.timezone]
+      }
+    };
+    projectStore.setProjectConfig(config);
     emit('next');
   } catch (error) {
     // 校验失败，阻止跳转
@@ -105,19 +119,39 @@ const handleNext = async () => {
 // 5. 初始化
 fetchRustVersions();
 
+watch(
+  () => ({
+    nationCode: formData.value.nationCode,
+    remoteRepo: formData.value.remoteRepo
+  }),
+  (newVal, oldVal) => {
+    // 处理 nationCode 变化
+    if (!oldVal || newVal.nationCode !== oldVal.nationCode) {
+      const nation = projectStore.nationList.find(n => n.code === newVal.nationCode);
+      if (nation && nation.timezone.length > 0) {
+        formData.value.timezone = nation.timezone[0];
+      }
+    }
+    // 处理 remoteRepo 变化
+    if (!oldVal || newVal.remoteRepo !== oldVal.remoteRepo) {
+      formRef.value?.clearValidate();
+      if (newVal.remoteRepo) {
+        const match = newVal.remoteRepo.match(/([^\/]+?)(?:\.git)?$/);
+        if (match && match[1]) {
+          formData.value.name = match[1];
+        }
+      }
+    }
+  },
+  { immediate: true }
+);
+
 </script>
 
 <template>
-  <FormCardContainer
-    :showPrev="props.currentStep > 1"
-    :showNext="props.currentStep < props.totalSteps"
-    :showReset="true"
-    :showGenerate="props.currentStep === props.totalSteps"
-    @prev="$emit('prev')"
-    @next="handleNext"
-    @reset="resetConfig"
-    @generate="$emit('generate')"
-  >
+  <FormCardContainer :showPrev="props.currentStep > 1" :showNext="props.currentStep < props.totalSteps"
+    :showReset="true" :showGenerate="props.currentStep === props.totalSteps" @prev="$emit('prev')" @next="handleNext"
+    @reset="resetConfig" @generate="$emit('generate')">
     <template #title>项目基础设置</template>
     <el-form ref="formRef" :model="formData" label-width="120px" class="project-form" status-icon>
       <el-form-item label="存储方式">
@@ -152,14 +186,38 @@ fetchRustVersions();
       <el-form-item label="作者">
         <el-input v-model="formData.author" placeholder="请输入作者" />
       </el-form-item>
+      <el-form-item label="国家">
+        <el-select
+          v-model="formData.nationCode"
+          placeholder="请选择国家"
+        >
+          <el-option
+            v-for="nation in projectStore.nationList"
+            :key="nation.code"
+            :label="nation.name"
+            :value="nation.code"
+          />
+        </el-select>
+        <div class="form-help-text">选择项目所在的国家/地区，会为中国地区替换为国内加速镜像</div>
+      </el-form-item>
+      <el-form-item label="时区">
+        <el-select
+          v-model="formData.timezone"
+          placeholder="请选择时区"
+        >
+          <el-option
+            v-for="option in timezoneOptions"
+            :key="option"
+            :label="option"
+            :value="option"
+          />
+        </el-select>
+      </el-form-item>
       <el-form-item label="Rust 版本">
         <el-select v-model="formData.rustVersion" filterable remote :remote-method="handleRemoteRustVersion"
           :loading="loading" placeholder="请选择 Rust 版本">
           <el-option v-for="item in rustVersions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
-      </el-form-item>
-      <el-form-item>
-        <!-- 底部按钮已由FormCardContainer统一管理，这里可省略 -->
       </el-form-item>
     </el-form>
   </FormCardContainer>
@@ -170,5 +228,12 @@ fetchRustVersions();
   max-width: 600px;
   margin: 0 auto;
   padding: 20px;
+}
+
+.form-help-text {
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.4;
+  padding-top: 4px;
 }
 </style>
